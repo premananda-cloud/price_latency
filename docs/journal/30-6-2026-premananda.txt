@@ -1,0 +1,8 @@
+# documenting research progress and decision
+Date : 30-6-2026
+Author : Premananda
+Content : {today i made a plan  to find out "Research Question: How many days does it take for a price shock at a major mainland hub (Azadpur, Delhi) to cascade into the Imphal Mandi — and what does that lag quantify about structural logistical isolation?"
+the plan is documented in git hub "https://github.com/premananda-cloud/price-latency-northeast-india#"
+docs/PLAN.txt
+this venture can be particularly helpful in manking key decision in inventory management and having a portal to informed mathemitacally backed data points to
+consider in decision making and strategic planning}
