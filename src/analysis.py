@@ -203,6 +203,34 @@ def plot_tlcc(report: dict, hub_state: str, local_state: str, out_name: str = No
     print(f"Saved TLCC plot -> {out_path}")
 
 
+def plot_spread(df: pd.DataFrame, hub_state: str, local_state: str, holdout_start: str = None, out_name: str = None):
+    """
+    Plot the local-minus-hub price spread over the full observed range,
+    with an optional marker for where the holdout period starts. This
+    is the diagnostic for spotting *when* a structural break (like the
+    cointegration flip) happened, not just that it happened.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ax.plot(df.index, df["spread"])
+    if holdout_start is not None:
+        ax.axvline(pd.Timestamp(holdout_start), color="red", linestyle="--", label="holdout start")
+        ax.legend()
+    ax.set_xlabel("date")
+    ax.set_ylabel("spread ($/bu)")
+    ax.set_title(f"{local_state.capitalize()} - {hub_state.capitalize()} corn price spread")
+
+    if out_name is None:
+        out_name = f"fig_spread_{hub_state}_{local_state}.png"
+    out_path = FIGURES_DIR / out_name
+    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    print(f"Saved spread plot -> {out_path}")
+
+
 def _parse_args():
     parser = argparse.ArgumentParser(description="Run TLCC/Granger/cointegration analysis on cleaned panel")
     parser.add_argument("--commodity", default="CORN")
@@ -211,6 +239,8 @@ def _parse_args():
     parser.add_argument("--freq", default="MONTHLY")
     parser.add_argument("--max-lag", type=int, default=12)
     parser.add_argument("--plot", action="store_true", help="Save a quick TLCC sanity-check plot")
+    parser.add_argument("--spread-plot", action="store_true", help="Save the hub/local spread over time")
+    parser.add_argument("--holdout-start", default=None, help="Marks a vertical line on the spread plot, e.g. 2024-01-01")
     return parser.parse_args()
 
 
@@ -226,3 +256,6 @@ if __name__ == "__main__":
 
     if args.plot:
         plot_tlcc(report, hub, local)
+
+    if args.spread_plot:
+        plot_spread(df, hub, local, holdout_start=args.holdout_start)
