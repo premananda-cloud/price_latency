@@ -1,0 +1,6 @@
+Update: 01-7-2026 14:40
+Task: API Validation and Granularity Adjustment
+
+- Successfully connected to the USDA NASS QuickStats API inside the local venv. Verified authentication and response parsing.
+- Identified a structural limitation in NASS: Tomato price data is restricted to an ANNUAL frequency (retrieved 18 historical rows). This level of aggregation is too low for time-lagged cross-correlation modeling.
+- Decision: Adjusting query parameters to fetch high-frequency data points to ensure the statistical validity of the lag models.
