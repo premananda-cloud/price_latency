@@ -231,6 +231,88 @@ def plot_spread(df: pd.DataFrame, hub_state: str, local_state: str, holdout_star
     print(f"Saved spread plot -> {out_path}")
 
 
+def find_structural_break(series: pd.Series, label: str) -> dict:
+    """
+    Zivot-Andrews test: finds the most statistically likely single
+    structural break point in a series, allowing for a unit root.
+    Use this on the spread series to identify WHEN the basis
+    relationship shifted, rather than inferring it from comparing
+    train vs. full-period cointegration results (which only tells you
+    THAT something changed, not when).
+
+    Note: this tests for one break. If the spread plot shows what
+    looks like multiple regime shifts, one break date is a
+    simplification — worth checking the result against the plot by
+    eye before treating it as the whole story.
+    """
+    from statsmodels.tsa.stattools import zivot_andrews
+
+    clean = series.dropna()
+    result = zivot_andrews(clean, autolag="AIC")
+    break_idx = int(result[4])
+    break_date = clean.index[break_idx]
+    return {
+        "label": label,
+        "za_stat": float(result[0]),
+        "p_value": float(result[1]),
+        "break_date": break_date,
+    }
+
+
+def rolling_cointegration(
+    price_a: pd.Series,
+    price_b: pd.Series,
+    window: int = 60,
+    step: int = 1,
+) -> pd.DataFrame:
+    """
+    Roll a fixed-width window across both price level series and run
+    Engle-Granger cointegration at each step. This gives a specific,
+    dateable characterization of WHEN the long-run relationship holds
+    vs. doesn't, rather than the binary train-vs-full comparison in
+    validation.py, which only shows THAT it's unstable.
+
+    window=60 gives 5-year sub-windows on monthly data — long enough
+    for Engle-Granger to have reasonable power, short enough to
+    localize a multi-year regime shift like the one visible in the
+    spread plot.
+    """
+    df = pd.concat([price_a, price_b], axis=1).dropna()
+    records = []
+    for end in range(window, len(df) + 1, step):
+        sub = df.iloc[end - window:end]
+        score, p_value, _ = coint(sub.iloc[:, 0], sub.iloc[:, 1])
+        records.append({
+            "window_end": sub.index[-1],
+            "eg_score": float(score),
+            "p_value": float(p_value),
+            "cointegrated_5pct": p_value < 0.05,
+        })
+    return pd.DataFrame(records).set_index("window_end")
+
+
+def plot_rolling_cointegration(rolling_df: pd.DataFrame, hub_state: str, local_state: str, out_name: str = None):
+    """Plot the rolling cointegration p-value over time against the 5% threshold."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ax.plot(rolling_df.index, rolling_df["p_value"])
+    ax.axhline(0.05, color="red", linestyle="--", label="5% significance")
+    ax.set_xlabel("window end date")
+    ax.set_ylabel("Engle-Granger p-value")
+    ax.set_title(f"Rolling 60-month cointegration: {hub_state} vs {local_state}")
+    ax.legend()
+
+    if out_name is None:
+        out_name = f"fig_rolling_coint_{hub_state}_{local_state}.png"
+    out_path = FIGURES_DIR / out_name
+    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    print(f"Saved rolling cointegration plot -> {out_path}")
+
+
 def _parse_args():
     parser = argparse.ArgumentParser(description="Run TLCC/Granger/cointegration analysis on cleaned panel")
     parser.add_argument("--commodity", default="CORN")
@@ -241,6 +323,9 @@ def _parse_args():
     parser.add_argument("--plot", action="store_true", help="Save a quick TLCC sanity-check plot")
     parser.add_argument("--spread-plot", action="store_true", help="Save the hub/local spread over time")
     parser.add_argument("--holdout-start", default=None, help="Marks a vertical line on the spread plot, e.g. 2024-01-01")
+    parser.add_argument("--break-test", action="store_true", help="Run Zivot-Andrews structural break test on the spread")
+    parser.add_argument("--rolling-coint", action="store_true", help="Run rolling-window cointegration and plot p-value over time")
+    parser.add_argument("--rolling-window", type=int, default=60, help="Window size in months for rolling cointegration")
     return parser.parse_args()
 
 
@@ -259,3 +344,41 @@ if __name__ == "__main__":
 
     if args.spread_plot:
         plot_spread(df, hub, local, holdout_start=args.holdout_start)
+
+    if args.break_test:
+        break_result = find_structural_break(df["spread"], "spread")
+        print("\n=== Zivot-Andrews structural break test (on spread) ===")
+        print(f"candidate break_date = {break_result['break_date'].date()}")
+        print(f"za_stat = {break_result['za_stat']:.3f}  p = {break_result['p_value']:.4f}")
+        if break_result["p_value"] < 0.05:
+            print(
+                f"SIGNIFICANT at 5% — evidence supports a real structural break "
+                f"around {break_result['break_date'].date()}."
+            )
+        else:
+            print(
+                "NOT significant at conventional levels. The candidate date above "
+                "is just where the test statistic was minimized, not a confirmed "
+                "break — the test found no strong evidence of a single discrete "
+                "break point. Don't report this date as 'the break' in the paper; "
+                "the honest finding is that the spread shows slow cyclical "
+                "variation without a clean single structural break."
+            )
+
+    if args.rolling_coint:
+        rolling_df = rolling_cointegration(df[hub], df[local], window=args.rolling_window)
+        print(f"\n=== Rolling {args.rolling_window}-month cointegration ===")
+        n_cointegrated = rolling_df["cointegrated_5pct"].sum()
+        n_total = len(rolling_df)
+        print(f"Cointegrated at 5% in {n_cointegrated}/{n_total} windows ({100*n_cointegrated/n_total:.0f}%)")
+        first_date, last_date = rolling_df.index.min().date(), rolling_df.index.max().date()
+        print(f"Window range: {first_date} to {last_date}")
+        # Print contiguous stretches where the regime changes, so it's
+        # legible without eyeballing every row
+        prev = None
+        for date, row in rolling_df.iterrows():
+            state = row["cointegrated_5pct"]
+            if state != prev:
+                print(f"  {date.date()}: {'cointegrated' if state else 'not cointegrated'} (p={row['p_value']:.4f})")
+                prev = state
+        plot_rolling_cointegration(rolling_df, hub, local)

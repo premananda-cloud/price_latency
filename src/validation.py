@@ -93,11 +93,13 @@ def compare_reports(train_report: dict, full_report: dict, hub_state: str, local
         )
     else:
         print(
-            f"Cointegration result FLIPPED: {'cointegrated' if train_cointegrated else 'not cointegrated'} "
+            f"Cointegration result CHANGED: {'cointegrated' if train_cointegrated else 'not cointegrated'} "
             f"in train (p={train_coint_p:.4f}) vs. {'cointegrated' if full_cointegrated else 'not cointegrated'} "
-            f"in full period (p={full_coint_p:.4f}). This suggests a STRUCTURAL BREAK — the long-run "
-            "equilibrium relationship held historically but weakened/broke once recent data is included. "
-            "Worth investigating when the break occurred rather than treating this as noise."
+            f"in full period (p={full_coint_p:.4f}). NOTE: a Zivot-Andrews structural break test on the "
+            "spread (run separately via `analysis.py --break-test`) found NO statistically significant "
+            "single break point — so this instability is better explained as sensitivity to a slow, wide "
+            "cyclical pattern in the spread than as evidence of a discrete structural break. Don't call "
+            "this a 'structural break' without that caveat."
         )
 
 
