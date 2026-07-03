@@ -15,3 +15,20 @@ rojects/p/src$ tree -I 'venv'
 (venv) premananda@debian:~/projects/p/src$
 Pull Data from USDA NASS clean and run analysis and use vcalidation
 Next step Build pipeline tooll to data analysis on daily data from MARS
+
+#Finding TLCC show datra are insta
+Instantaneous price transmission (TLCC k*=0, ρ=0.84): Iowa and Ohio corn prices move in perfect sync within the same month. There is zero measurable lag. Iowa is the clear price leader (Granger causality Iowa→Ohio is significant up to 8 months), while Ohio is a price follower. This confirms both states are pricing off the same CME CBOT futures benchmark—the market is highly efficient.
+
+Broken long-run relationship (Cointegration p=0.1545): Despite moving together month-to-month, Iowa and Ohio prices do NOT have a stable long-term statistical tether over the full 2015–2026 period. The historical pricing relationship has broken down.
+
+The culprit: a 2021–2023 supply shock regime: The spread (Ohio minus Iowa) shows three distinct regimes:
+
+2015–2020: Stable, positive spread (+$0.10 to +$0.50)—Ohio pays a normal transport premium.
+
+2021–2023: The spread crashes and inverts (hitting -$0.85)—Iowa becomes more expensive due to the Ukraine war, post-COVID logistics disruptions, and ethanol demand surges hitting Iowa (a major ethanol producer) disproportionately hard.
+
+2024–2026: Partial recovery, but the cointegration test confirms the long-run relationship has NOT fully returned to pre-2021 stability.
+"Iowa and Ohio corn prices transmit instantly with zero lag, but the 2021–2023 global supply shock permanently broke their long-run basis relationship, which has only partially normalized through 2026."
+
+
+changed question to "Under extreme market stress, do highly integrated corn markets maintain their long-run pricing relationships, and how resilient is the basis recovery?"

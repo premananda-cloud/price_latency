@@ -63,7 +63,9 @@ etc.) and independently testable — `clean.py` doesn't need network access,
 `analysis.py` doesn't need to re-fetch, and so on.
 
 `pipeline.py` (orchestrates all four end-to-end for an arbitrary
-commodity/state pair) is **not yet built** — see Status below.
+commodity/state pair) is **built and confirmed working** — see Status
+table below. End-to-end run and `--skip-fetch` rerun both produced
+bit-identical output.
 
 ---
 
@@ -89,18 +91,19 @@ cd src
 #    for any new commodity/state pair)
 python fetch.py --scan --commodity CORN --states IOWA,OHIO,ILLINOIS
 
-# 2. Fetch and cache raw data
-python fetch.py --commodity CORN --states IOWA,OHIO --year-start 2015 --year-end 2026 --freq MONTHLY
+# 2. Run the full pipeline (fetch -> clean -> analysis -> validation) for
+#    a commodity/state pair in one command
+python pipeline.py --commodity CORN --hub IOWA --local OHIO \
+    --year-start 2015 --year-end 2026 --holdout-start 2024-01-01
 
-# 3. Clean and align into one panel
-python clean.py --commodity CORN --hub IOWA --local OHIO --year-start 2015 --year-end 2026
-
-# 4. Run the core analysis (TLCC, Granger, cointegration)
-python analysis.py --plot --spread-plot --holdout-start 2024-01-01
-
-# 5. Backtest: does the finding hold on a train-only slice vs. the full period?
-python validation.py --holdout-start 2024-01-01
+# Or, rerun against already-cached data without hitting the API again:
+python pipeline.py --commodity CORN --hub IOWA --local OHIO \
+    --year-start 2015 --year-end 2026 --holdout-start 2024-01-01 --skip-fetch
 ```
+
+Individual stages (`fetch.py`, `clean.py`, `analysis.py`, `validation.py`)
+remain independently runnable via their own CLIs if you need to work on
+one step in isolation — see each file's docstring for its own arguments.
 
 ---
 
@@ -115,25 +118,32 @@ written and assumed correct.
 | `clean.py` | ✅ Confirmed working | 137-row aligned panel, no missing months, no duplicate-date warnings fired, suppressed-value (`(D)`) handling in place but not yet exercised by this particular pull |
 | `analysis.py` | ✅ Confirmed working | Returns pass ADF stationarity (p≈0.0000 both states); prices correctly non-stationary |
 | `validation.py` | ✅ Confirmed working | Backtest comparison logic caught a real discrepancy (see Findings) rather than just reporting stable numbers |
+| `analysis.py` — structural break test | ✅ Confirmed working | Zivot-Andrews correctly distinguished "candidate break date" from "statistically significant break" — result was non-significant, which corrected an initial over-read of the spread plot |
+| `pipeline.py` | ✅ Confirmed working | End-to-end run and `--skip-fetch` rerun both produced bit-identical output — confirms reproducibility, not just that it runs |
 
-### Headline findings (from the full 2015–2026 panel)
+## Full results, methodology, and interpretation
 
-- **k\* = 0 months**, bootstrap 95% CI exactly `[0.0, 0.0]` — no detectable
-  lag at monthly resolution between Iowa and Ohio corn prices. Peak
-  correlation 0.84.
-- **Granger causality is asymmetric**: Iowa → Ohio significant (p<0.05) at
-  short lags; Ohio → Iowa is not, aside from one isolated hit likely
-  attributable to multiple-comparisons noise (12 tests at α=0.05).
-- **Engle-Granger cointegration is inconsistent between train (2015–2023,
-  p=0.0004, cointegrated) and full period (2015–2026, p=0.1545, not
-  cointegrated).** Visual inspection of the spread (see
-  `figures/fig_spread_iowa_ohio.png`) shows this is **not** a clean
-  structural break at the 2024 holdout boundary — it's a slow, wide,
-  multi-year oscillation (peak-to-trough swings of roughly $1.30/bu) that
-  predates the holdout window. The honest reading: Engle-Granger's result
-  is sensitive to which slice of a slow cycle it's given, not evidence of
-  a discrete 2024 event. This needs a rolling-window cointegration test to
-  characterize properly — not yet built.
+See **`docs/REPORT.md`** for the complete methodology writeup, all
+confirmed numerical results, and paper-writing-ready interpretation —
+including the open items that still need resolving before submission.
+That document is the reference; results are not duplicated in full here
+to avoid the two drifting out of sync.
+
+### Headline findings (full detail in REPORT.md)
+
+- **k\* = 0 months**, bootstrap 95% CI `[0.0, 0.0]` — no detectable lag at
+  monthly resolution. Peak correlation 0.84. Stable across train/full
+  backtest split.
+- **Granger causality asymmetric**: Iowa → Ohio significant; Ohio → Iowa
+  is not (aside from one likely false-positive lag).
+- **Cointegration is genuinely weak, not just unstable**: a rolling
+  60-month Engle-Granger test found significance in only 26% of windows
+  (20/78), flickering in and out rather than showing two clean regimes. A
+  Zivot-Andrews structural break test found **no significant break**
+  (p=0.82) — this isn't a "held, then broke" story. Iowa and Ohio corn
+  are strongly synchronized short-run (k*=0, ρ=0.84) but do **not**
+  exhibit a robust long-run equilibrium relationship. See REPORT.md
+  Section 3.6/4 for the full result and how to write this up honestly.
 
 ---
 
@@ -144,15 +154,17 @@ written and assumed correct.
   it just means nothing is detectable at the resolution this data source
   provides. Framed honestly in the discussion, not oversold as "instant
   transmission."
-- **Cointegration interpretation is unresolved**, per above — needs a
-  rolling-window test before the paper makes any structural-break claim.
-- **One isolated spike in the spread series** just before the holdout
-  boundary (~0.28, single month, sharp) hasn't been manually verified
-  against the raw NASS value — could be a genuine short-lived event or a
-  data artifact. Flagged, not yet resolved.
-- **`pipeline.py` doesn't exist yet.** Each step currently has to be run
-  manually in sequence. Fine for a single commodity/pair; would need
-  building out for the "reusable tool" version of this project.
+- **Cointegration instability (train vs. full period) is now explained**
+  by the Zivot-Andrews result above — no further action needed on this
+  specific item.
+- ~~Spread spike~~ **Resolved.** September 2023: Iowa dropped $5.77→$5.22
+  while Ohio held near-flat ($5.56→$5.50), flipping the spread sign for
+  one month. Confirmed against raw NASS values — genuine market divergence,
+  not a data or cleaning artifact.
+- **Only one commodity/state pair has been run through the full
+  pipeline** (Iowa/Ohio corn). `pipeline.py` supports arbitrary pairs, but
+  a robustness check against a second pair (e.g. Iowa/Nebraska) hasn't
+  been run yet.
 - **Daily-resolution cross-check (USDA AMS Market News) not attempted.**
   Identified as feasible (Iowa and Ohio both publish Daily Grain Bids
   reports) but requires a separate API registration and elevator-level

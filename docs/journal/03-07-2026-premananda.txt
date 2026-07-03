@@ -1,0 +1,3 @@
+wrote and updated README file wrote and update REPORT
+it contains process method result and intrepretation conducted robustness
+test full piple working and reproducable
