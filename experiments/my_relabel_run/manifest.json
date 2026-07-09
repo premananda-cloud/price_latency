@@ -1,0 +1,31 @@
+{
+  "run_id": "my_relabel_run",
+  "timestamp": "2026-07-08T22:34:35",
+  "runtime_seconds": 9.2,
+  "params": {
+    "commodity": "CORN",
+    "hub": "IOWA",
+    "local": "OHIO",
+    "year_start": 2015,
+    "year_end": 2026,
+    "freq": "MONTHLY",
+    "statisticcat": "PRICE RECEIVED",
+    "agg_level": "STATE",
+    "holdout_start": "2024-01-01",
+    "max_lag": 12,
+    "skip_fetch": true,
+    "rolling_coint": false,
+    "rolling_window": 60
+  },
+  "git_commit": "7b76448",
+  "package_versions": {
+    "pandas": "3.0.3",
+    "numpy": "2.5.0",
+    "scipy": "1.18.0",
+    "statsmodels": "0.14.6",
+    "matplotlib": "3.11.0"
+  },
+  "python_version": "3.13.5",
+  "panel_fingerprint_sha256_12": "270703a57c2f",
+  "n_months": 137
+}

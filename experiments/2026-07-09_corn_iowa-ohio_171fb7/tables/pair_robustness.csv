@@ -1,0 +1,3 @@
+local_state,status,n_months,k_star,k_star_ci_low,k_star_ci_high,peak_corr,granger_hub_to_local_min_p,granger_local_to_hub_min_p,cointegration_p,cointegrated_5pct
+NEBRASKA,ok,137.0,0.0,0.0,0.0,0.9179,0.0,0.1287,0.0082,True
+ILLINOIS,no cleaned panel found — run pipeline.py/clean.py for this pair first,,,,,,,,,

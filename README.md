@@ -53,9 +53,15 @@ src/
 ├── analysis.py         — TLCC (lag detection), bootstrap CI, Granger
 │                          causality (both directions), Engle-Granger
 │                          cointegration, diagnostic plots
-└── validation.py         — train/holdout backtest: re-runs analysis.py's
-                             full analysis on a train slice and compares
-                             against the full period to check stability
+├── validation.py         — train/holdout backtest: re-runs analysis.py's
+│                            full analysis on a train slice and compares
+│                            against the full period to check stability
+├── pipeline.py            — orchestrates fetch -> clean -> analysis ->
+│                             validation end-to-end for one commodity/pair
+└── experiment.py           — wraps pipeline.py for multi-experiment work:
+                              gives each run its own timestamped folder
+                              (figures, tables, manifest, report) and
+                              appends a row to a cross-run registry
 ```
 
 Each module is independently runnable via CLI (`python fetch.py --help`,
@@ -66,6 +72,11 @@ etc.) and independently testable — `clean.py` doesn't need network access,
 commodity/state pair) is **built and confirmed working** — see Status
 table below. End-to-end run and `--skip-fetch` rerun both produced
 bit-identical output.
+
+`experiment.py` sits on top of `pipeline.py` without modifying it —
+it's the recommended entry point once you're running more than one
+commodity/state pair or comparing parameter variants. See
+**Experiment tracking** below.
 
 ---
 
@@ -105,6 +116,73 @@ Individual stages (`fetch.py`, `clean.py`, `analysis.py`, `validation.py`)
 remain independently runnable via their own CLIs if you need to work on
 one step in isolation — see each file's docstring for its own arguments.
 
+**Running multiple experiments** (a new pair, a different date range, a
+robustness check) — use `experiment.py` instead of calling `pipeline.py`
+directly, so each run gets saved rather than overwriting the last one:
+
+```bash
+# Full default run — same defaults as pipeline.py, no arguments required
+python experiment.py
+
+# Override only what changes; everything else falls back to the default
+python experiment.py --hub IOWA --local NEBRASKA --rolling-coint \
+    --notes "robustness check against a second local state"
+
+# Re-run against cached data under a specific label
+python experiment.py --skip-fetch --experiment-name iowa_ohio_rerun_2026q3
+```
+
+See **Experiment tracking** below for what each run produces.
+
+---
+
+## Experiment tracking
+
+`experiment.py` wraps `pipeline.py` (unmodified) and gives every run its
+own self-contained, timestamped folder instead of the shared, overwritten
+output the four stages produce on their own. This is what to use once
+you're running more than the one validated Iowa/Ohio pair — e.g. the
+Iowa/Nebraska robustness check still marked as an open item below.
+
+Every argument has the same default as `pipeline.py`, so `python
+experiment.py` with no arguments reproduces the primary run; pass only
+the arguments you want to change for a variant.
+
+```
+experiments/
+├── registry.csv                              — one row per run, for
+│                                                cross-experiment comparison
+└── 2026-07-09_corn_iowa-ohio_a1b2c3/          — one folder per run
+    ├── manifest.json                          — params, git commit, package
+    │                                            versions, data fingerprint,
+    │                                            timestamp, runtime
+    ├── data/panel.csv                         — cleaned panel this run used
+    ├── figures/
+    │   ├── tlcc_lag_curve.png
+    │   ├── spread.png
+    │   └── rolling_cointegration.png          — only with --rolling-coint
+    ├── tables/                                — every number below as CSV
+    │   ├── stationarity_adf.csv
+    │   ├── tlcc_summary.csv / tlcc_full_curve.csv
+    │   ├── granger_hub_to_local.csv / granger_local_to_hub.csv
+    │   ├── cointegration_full_period.csv
+    │   ├── structural_break_zivot_andrews.csv
+    │   ├── backtest_train_vs_full.csv
+    │   └── rolling_cointegration.csv          — only with --rolling-coint
+    ├── logs/run.log                           — full console output
+    └── REPORT.md                              — folder guide + headline
+                                                  results + embedded figures
+```
+
+`registry.csv` holds one row per run (k*, CI, peak correlation, both
+Granger directions, cointegration p-value, structural break p-value and
+date, rolling-cointegration %, git commit, notes) so multiple experiments
+can be compared at a glance without opening each folder.
+
+A run refuses to overwrite an existing folder with the identical param
+set from the same day — pass `--experiment-name` if you deliberately want
+to redo one, or change a parameter for a genuine variant.
+
 ---
 
 ## Validated status (as of this document)
@@ -120,6 +198,7 @@ written and assumed correct.
 | `validation.py` | ✅ Confirmed working | Backtest comparison logic caught a real discrepancy (see Findings) rather than just reporting stable numbers |
 | `analysis.py` — structural break test | ✅ Confirmed working | Zivot-Andrews correctly distinguished "candidate break date" from "statistically significant break" — result was non-significant, which corrected an initial over-read of the spread plot |
 | `pipeline.py` | ✅ Confirmed working | End-to-end run and `--skip-fetch` rerun both produced bit-identical output — confirms reproducibility, not just that it runs |
+| `experiment.py` | ⚠️ Built, not yet run against live data | Syntax-checked; wraps `pipeline.py` without modifying it. Not yet exercised end-to-end (no NASS API access at build time) — run it once and confirm the produced folder/report/registry match this doc before relying on it for the update. |
 
 ## Full results, methodology, and interpretation
 
@@ -162,9 +241,11 @@ to avoid the two drifting out of sync.
   one month. Confirmed against raw NASS values — genuine market divergence,
   not a data or cleaning artifact.
 - **Only one commodity/state pair has been run through the full
-  pipeline** (Iowa/Ohio corn). `pipeline.py` supports arbitrary pairs, but
-  a robustness check against a second pair (e.g. Iowa/Nebraska) hasn't
-  been run yet.
+  pipeline** (Iowa/Ohio corn). `pipeline.py` supports arbitrary pairs, and
+  `experiment.py` now exists specifically to make running and tracking a
+  second pair (e.g. Iowa/Nebraska) low-friction — `python experiment.py
+  --local NEBRASKA` — but that robustness check itself still hasn't been
+  run yet.
 - **Daily-resolution cross-check (USDA AMS Market News) not attempted.**
   Identified as feasible (Iowa and Ohio both publish Daily Grain Bids
   reports) but requires a separate API registration and elevator-level
@@ -179,3 +260,9 @@ authentication beyond the key). All fetch/clean steps are deterministic
 given the same date range — raw pulls are cached in `data/raw/` with
 filenames encoding every query parameter, so re-running `clean.py`/
 `analysis.py` against the same cached data reproduces identical results.
+
+Runs through `experiment.py` add a second layer of reproducibility on top
+of this: each run's `manifest.json` records the exact resolved params,
+git commit, package versions, and a hash of the actual cleaned panel it
+analyzed — so any past experiment folder can be checked against the code
+and data that produced it, not just re-run and hoped to match.

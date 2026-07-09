@@ -1,19 +1,29 @@
 """
 src/validation.py
 
-Backtest: split the cleaned panel into train/holdout, re-run the
-analysis on train only, then check whether the same headline findings
-(k*, Granger direction, cointegration) hold up against the holdout
-period the model never saw. This is the actual validation step v1
-never had — a lag number with nothing checking it against real
-subsequent data is just an assertion.
+Two kinds of robustness check for the same headline findings (k*,
+Granger direction, cointegration):
+
+1. Temporal — split into train/holdout, re-run on train only, compare
+   against the full period. (v1's original gap: a lag number with
+   nothing checking it against real subsequent data is just an
+   assertion.)
+
+2. Spatial/pair — re-run the same hub state against several other
+   local states, to check whether the findings are specific to one
+   pair (Iowa/Ohio) or hold up more generally. This is the piece the
+   README's open items flagged as not yet done ("only one commodity/
+   state pair has been run"). It assumes the other pairs' panels have
+   already been fetched + cleaned (via pipeline.py or fetch.py/clean.py
+   directly) — this module only loads and analyzes, so re-running it
+   doesn't re-hit the NASS API.
 """
 
 import argparse
 import pandas as pd
 
-from config import PROCESSED_DATA_DIR
-from analysis import load_panel, run_full_analysis, print_report
+from config import PROCESSED_DATA_DIR, FIGURES_DIR
+from analysis import load_panel, run_full_analysis, print_report, AnalysisError
 
 
 def split_panel(df: pd.DataFrame, holdout_start: str):
@@ -103,6 +113,165 @@ def compare_reports(train_report: dict, full_report: dict, hub_state: str, local
         )
 
 
+def run_pair_robustness(
+    commodity_desc: str,
+    hub_state: str,
+    local_states: list,
+    freq_desc: str = "MONTHLY",
+    max_lag: int = 12,
+) -> tuple:
+    """
+    Re-run the full analysis for the same hub state against several
+    other local states, to check whether k*, Granger direction, and
+    cointegration are specific to one pair or generalize.
+
+    Each local state's cleaned panel is expected to already exist
+    (produced separately via pipeline.py or fetch.py/clean.py for that
+    pair) — this function only loads and analyzes, it never fetches.
+    A missing or too-small panel for a given local state is recorded
+    as a row with status != "ok" rather than raising, so one bad pair
+    doesn't take down the whole robustness check.
+
+    Returns (summary_df, reports) where summary_df has one row per
+    local state and reports is {local_state: full report dict} for
+    the pairs that succeeded.
+    """
+    hub = hub_state.lower()
+    rows = []
+    reports = {}
+
+    for local_state in local_states:
+        local = local_state.lower()
+        row = {"local_state": local_state}
+        try:
+            df = load_panel(
+                commodity_desc=commodity_desc, hub_state=hub_state,
+                local_state=local_state, freq_desc=freq_desc,
+            )
+        except FileNotFoundError:
+            row["status"] = "no cleaned panel found — run pipeline.py/clean.py for this pair first"
+            rows.append(row)
+            continue
+
+        try:
+            report = run_full_analysis(df, hub_state=hub, local_state=local, max_lag=max_lag)
+        except AnalysisError as exc:
+            row["status"] = f"analysis failed: {exc}"
+            rows.append(row)
+            continue
+
+        reports[local_state] = report
+        c = report["cointegration"]
+        row.update({
+            "status": "ok",
+            "n_months": len(df),
+            "k_star": report["k_star"],
+            "k_star_ci_low": report["k_star_ci"][0],
+            "k_star_ci_high": report["k_star_ci"][1],
+            "peak_corr": round(report["peak_corr"], 4),
+            "granger_hub_to_local_min_p": round(min(report["granger_hub_causes_local"].values()), 4),
+            "granger_local_to_hub_min_p": round(min(report["granger_local_causes_hub"].values()), 4),
+            "cointegration_p": round(c["p_value"], 4),
+            "cointegrated_5pct": c["p_value"] < 0.05,
+        })
+        rows.append(row)
+
+    summary = pd.DataFrame(rows)
+    return summary, reports
+
+
+def print_pair_robustness(summary: pd.DataFrame, hub_state: str):
+    """
+    Print the pair-robustness table plus a plain-language read on
+    whether each headline finding is a one-pair fluke or holds up.
+    """
+    print(f"=== Pair robustness: {hub_state} vs. {list(summary['local_state'])} ===\n")
+    print(summary.to_string(index=False))
+
+    ok = summary[summary["status"] == "ok"]
+    skipped = summary[summary["status"] != "ok"]
+    if len(skipped):
+        print(f"\n{len(skipped)} pair(s) skipped (see status column above) — read below applies only to the {len(ok)} that ran.")
+
+    print("\n=== Read ===")
+    if len(ok) == 0:
+        print("No pairs produced a usable report — nothing to compare.")
+        return
+
+    k_stars = ok["k_star"].unique()
+    if len(k_stars) == 1:
+        print(f"k* is CONSISTENT at {k_stars[0]} months across all {len(ok)} tested pairs.")
+    else:
+        print(
+            f"k* VARIES across pairs ({dict(zip(ok['local_state'], ok['k_star']))}) — "
+            "the lag finding is pair-specific, not a general property of the hub state."
+        )
+
+    granger_sig = ok["granger_hub_to_local_min_p"] < 0.05
+    if granger_sig.all():
+        print(f"{hub_state}->local Granger significance HOLDS for all tested pairs.")
+    elif not granger_sig.any():
+        print(f"{hub_state}->local Granger significance does NOT hold for any tested pair.")
+    else:
+        holds_for = list(ok.loc[granger_sig, "local_state"])
+        fails_for = list(ok.loc[~granger_sig, "local_state"])
+        print(
+            f"{hub_state}->local Granger significance is MIXED: holds for {holds_for}, "
+            f"not for {fails_for} — the causality direction found in the original pair "
+            "is not a general property of the hub state."
+        )
+
+    coint_sig = ok["cointegrated_5pct"]
+    if coint_sig.all():
+        print("Cointegration HOLDS for all tested pairs.")
+    elif not coint_sig.any():
+        print("Cointegration does NOT hold for any tested pair (consistent with the weak, "
+              "flickering cointegration already found for the original pair).")
+    else:
+        holds_for = list(ok.loc[coint_sig, "local_state"])
+        fails_for = list(ok.loc[~coint_sig, "local_state"])
+        print(f"Cointegration is MIXED: holds for {holds_for}, not for {fails_for}.")
+
+
+def plot_pair_robustness(summary: pd.DataFrame, hub_state: str, out_name: str = None):
+    """
+    Bar chart of k* (with bootstrap CI) per tested local state, so
+    it's visible at a glance whether the lag finding is stable across
+    pairs or specific to one. Skipped pairs (no panel / analysis
+    failure) are omitted from the plot, not shown as zero.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    ok = summary[summary["status"] == "ok"]
+    if len(ok) == 0:
+        print("No successful pairs to plot — skipping pair-robustness figure.")
+        return None
+
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(max(6, 1.5 * len(ok)), 5))
+    x = range(len(ok))
+    yerr = [
+        ok["k_star"] - ok["k_star_ci_low"],
+        ok["k_star_ci_high"] - ok["k_star"],
+    ]
+    ax.bar(x, ok["k_star"], yerr=yerr, capsize=5)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(ok["local_state"])
+    ax.axhline(0, color="gray", linewidth=0.8)
+    ax.set_ylabel("k* (months, + = hub leads local)")
+    ax.set_title(f"k* by local state, hub = {hub_state}")
+
+    if out_name is None:
+        out_name = f"fig_pair_robustness_{hub_state.lower()}.png"
+    out_path = FIGURES_DIR / out_name
+    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    print(f"Saved pair-robustness plot -> {out_path}")
+    return out_path
+
+
+
 def run_backtest(
     commodity_desc: str = "CORN",
     hub_state: str = "IOWA",
@@ -152,6 +321,12 @@ def _parse_args():
     parser.add_argument("--freq", default="MONTHLY")
     parser.add_argument("--holdout-start", default="2024-01-01")
     parser.add_argument("--max-lag", type=int, default=12)
+    parser.add_argument(
+        "--robustness-pairs", default=None,
+        help="Comma-separated list of additional local states to test the same "
+             "hub against, e.g. NEBRASKA,ILLINOIS. Panels for these must already "
+             "be fetched+cleaned; this only loads and analyzes, it doesn't fetch.",
+    )
     return parser.parse_args()
 
 
@@ -161,3 +336,13 @@ if __name__ == "__main__":
         commodity_desc=args.commodity, hub_state=args.hub, local_state=args.local,
         freq_desc=args.freq, holdout_start=args.holdout_start, max_lag=args.max_lag,
     )
+
+    if args.robustness_pairs:
+        local_states = [s.strip().upper() for s in args.robustness_pairs.split(",") if s.strip()]
+        print("\n")
+        summary, reports = run_pair_robustness(
+            commodity_desc=args.commodity, hub_state=args.hub,
+            local_states=local_states, freq_desc=args.freq, max_lag=args.max_lag,
+        )
+        print_pair_robustness(summary, args.hub)
+        plot_pair_robustness(summary, args.hub)

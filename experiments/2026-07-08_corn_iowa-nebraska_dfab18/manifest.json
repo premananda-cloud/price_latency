@@ -1,0 +1,31 @@
+{
+  "run_id": "2026-07-08_corn_iowa-nebraska_dfab18",
+  "timestamp": "2026-07-08T22:34:22",
+  "runtime_seconds": 17.3,
+  "params": {
+    "commodity": "CORN",
+    "hub": "IOWA",
+    "local": "NEBRASKA",
+    "year_start": 2015,
+    "year_end": 2026,
+    "freq": "MONTHLY",
+    "statisticcat": "PRICE RECEIVED",
+    "agg_level": "STATE",
+    "holdout_start": "2024-01-01",
+    "max_lag": 12,
+    "skip_fetch": false,
+    "rolling_coint": true,
+    "rolling_window": 60
+  },
+  "git_commit": "7b76448",
+  "package_versions": {
+    "pandas": "3.0.3",
+    "numpy": "2.5.0",
+    "scipy": "1.18.0",
+    "statsmodels": "0.14.6",
+    "matplotlib": "3.11.0"
+  },
+  "python_version": "3.13.5",
+  "panel_fingerprint_sha256_12": "511be679b83e",
+  "n_months": 137
+}
