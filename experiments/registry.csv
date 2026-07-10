@@ -2,4 +2,4 @@ run_id,timestamp,commodity,hub,local,year_start,year_end,holdout_start,max_lag,n
 2026-07-08_corn_iowa-ohio_ae2326,2026-07-08T22:34:00,CORN,IOWA,OHIO,2015,2026,2024-01-01,12,137,0,0.0,0.0,0.8403,0.0089,0.0467,0.1545,0.0004,0.8224,n/a (not significant),,7b76448,
 2026-07-08_corn_iowa-nebraska_dfab18,2026-07-08T22:34:22,CORN,IOWA,NEBRASKA,2015,2026,2024-01-01,12,137,0,0.0,0.0,0.9179,0.0,0.1287,0.0082,0.0415,0.0,2022-09-01,46.2,7b76448,robustness pair
 my_relabel_run,2026-07-08T22:34:35,CORN,IOWA,OHIO,2015,2026,2024-01-01,12,137,0,0.0,0.0,0.8403,0.0089,0.0467,0.1545,0.0004,0.8224,n/a (not significant),,7b76448,
-2026-07-09_corn_iowa-ohio_171fb7,2026-07-09T17:34:16,CORN,IOWA,OHIO,2015,2026,2024-01-01,12,137,0,0.0,0.0,0.8403,0.0089,0.0467,0.1545,0.0004,0.8224,n/a (not significant),,NEBRASKA,True,7b76448,
+2026-07-09_corn_iowa-ohio_171fb7,2026-07-09T17:34:16,CORN,IOWA,OHIO,2015,2026,2024-01-01,12,137,0,0.0,0.0,0.8403,0.0089,0.0467,0.1545,0.0004,0.8224,n/a (not significant),,7b76448,robustness pair tested (NEBRASKA ok; ILLINOIS skipped - no cleaned panel)
