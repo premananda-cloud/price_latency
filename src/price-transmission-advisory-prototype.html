@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Should I act on this price move? — Price-Transmission Advisory Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#ECE7D8;
+    --paper-dark:#E2DCC8;
+    --ink:#2A241D;
+    --ink-soft:#5B5347;
+    --gold:#C0932E;
+    --gold-dark:#9C7423;
+    --evergreen:#2F4B3C;
+    --evergreen-ink:#1D3227;
+    --brick:#A0432B;
+    --brick-ink:#6E2C1B;
+    --line:#C9C0A8;
+    --shadow: 0 1px 0 rgba(42,36,29,0.06), 0 8px 24px rgba(42,36,29,0.10);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: var(--paper);
+    background-image:
+      radial-gradient(ellipse at top left, rgba(255,255,255,0.35), transparent 55%),
+      repeating-linear-gradient(0deg, rgba(42,36,29,0.015) 0px, rgba(42,36,29,0.015) 1px, transparent 1px, transparent 3px);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+    padding: 48px 20px 80px;
+  }
+  .wrap{ max-width: 760px; margin: 0 auto; }
+
+  header{ margin-bottom: 34px; }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gold-dark);
+    font-weight: 500;
+    margin-bottom: 14px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow::before{
+    content:"";
+    width:22px; height:2px; background: var(--gold-dark); display:inline-block;
+  }
+  h1{
+    font-family:'Fraunces', serif;
+    font-weight: 600;
+    font-size: clamp(30px, 5vw, 44px);
+    line-height: 1.08;
+    margin: 0 0 14px;
+    letter-spacing: -0.01em;
+  }
+  .sub{
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: 58ch;
+  }
+
+  .scope-strip{
+    margin-top:22px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--gold-dark);
+    background: rgba(255,255,255,0.35);
+    padding: 12px 16px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    font-family:'IBM Plex Mono', monospace;
+  }
+  .scope-strip b{ color: var(--ink); }
+
+  /* pair selector — styled like ticket tabs */
+  .selector{
+    display:flex; gap:10px; margin: 36px 0 0;
+  }
+  .tab{
+    flex:1;
+    text-align:left;
+    background: var(--paper-dark);
+    border: 1px solid var(--line);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    padding: 14px 18px 16px;
+    cursor:pointer;
+    font-family:'IBM Plex Sans', sans-serif;
+    color: var(--ink-soft);
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .tab .route{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    letter-spacing:0.08em;
+    text-transform: uppercase;
+    opacity:0.7;
+  }
+  .tab .name{
+    font-family:'Fraunces', serif;
+    font-size: 19px;
+    font-weight: 600;
+    margin-top: 3px;
+    color: var(--ink);
+  }
+  .tab.active{
+    background: #F7F4EA;
+    color: var(--ink);
+    box-shadow: var(--shadow);
+    position:relative;
+  }
+  .tab.active::after{
+    content:"";
+    position:absolute; left:0; right:0; bottom:-1px; height:2px; background:#F7F4EA;
+  }
+  .tab:not(.active):hover{ background: #DFD9C4; }
+  .tab:focus-visible{ outline: 2px solid var(--gold-dark); outline-offset: 2px; }
+
+  /* ticket card */
+  .ticket{
+    background: #F7F4EA;
+    border: 1px solid var(--line);
+    border-radius: 0 8px 8px 8px;
+    box-shadow: var(--shadow);
+    padding: 30px 30px 26px;
+    position: relative;
+    overflow: hidden;
+  }
+  .ticket::before{
+    content:"";
+    position:absolute; top:0; left:0; right:0; height:6px;
+    background: repeating-linear-gradient(90deg, var(--gold) 0 14px, transparent 14px 22px);
+    opacity:0.55;
+  }
+  .ticket-head{
+    display:flex; justify-content:space-between; align-items:baseline;
+    border-bottom: 1px dashed var(--line);
+    padding-bottom: 16px; margin-bottom: 22px;
+    flex-wrap: wrap; gap: 8px;
+  }
+  .ticket-head h2{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size: 21px;
+    margin:0;
+  }
+  .ticket-head .meta{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align:right;
+  }
+
+  .judgment{ margin-bottom: 26px; }
+  .judgment:last-of-type{ margin-bottom: 4px; }
+  .q{
+    font-size: 13px;
+    font-family:'IBM Plex Mono', monospace;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+  }
+
+  .stamp-row{
+    display:flex; align-items:flex-start; gap:18px;
+  }
+  .stamp{
+    flex: 0 0 auto;
+    font-family:'Fraunces', serif;
+    font-weight:700;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border: 2.5px solid currentColor;
+    border-radius: 6px;
+    padding: 9px 12px;
+    transform: rotate(-3deg);
+    white-space: nowrap;
+    line-height:1.15;
+  }
+  .stamp.safe{ color: var(--evergreen-ink); }
+  .stamp.caution{ color: var(--brick-ink); }
+  .stamp.neutral{ color: var(--gold-dark); }
+
+  .verdict-text{ flex:1; min-width: 220px; }
+  .verdict-text p{ margin: 0 0 8px; font-size: 15.5px; line-height:1.55; }
+  .stats{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    line-height:1.7;
+    background: rgba(42,36,29,0.035);
+    border-radius: 6px;
+    padding: 8px 12px;
+    display:inline-block;
+  }
+
+  footer{
+    margin-top: 40px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+  }
+  footer .cite{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    display:block;
+    margin-top:10px;
+    opacity:0.85;
+  }
+
+  @media (max-width: 560px){
+    .stamp-row{ flex-direction: column; }
+    .stamp{ transform: rotate(0deg); }
+    .selector{ flex-direction: column; }
+    .tab{ border-radius:8px; border-bottom:1px solid var(--line); }
+    .tab.active::after{ display:none; }
+    .ticket{ border-radius:8px; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="eyebrow">Price-transmission decision-support — working prototype</div>
+      <h1>Should I act on this price move?</h1>
+      <p class="sub">Pick a market pair below to see the two judgments a price-transmission-aware advisory would need to get right: whether a hub-market move is worth acting on, and whether a current price gap can be expected to close.</p>
+      <div class="scope-strip">
+        <b>Scope:</b> this reads out results already computed and validated on USDA NASS corn prices, Jan 2015&ndash;May 2026, for exactly two pairs &mdash; Iowa&ndash;Ohio and Iowa&ndash;Nebraska. It is not connected to live prices and does not cover other states or commodities yet.
+      </div>
+    </header>
+
+    <div class="selector">
+      <button class="tab active" id="tab-ohio" onclick="showPair('ohio')">
+        <div class="route">Hub &rarr; Local</div>
+        <div class="name">Iowa &rarr; Ohio</div>
+      </button>
+      <button class="tab" id="tab-nebraska" onclick="showPair('nebraska')">
+        <div class="route">Hub &rarr; Local</div>
+        <div class="name">Iowa &rarr; Nebraska</div>
+      </button>
+    </div>
+
+    <div class="ticket" id="ticket-ohio">
+      <div class="ticket-head">
+        <h2>Settlement advisory &mdash; Iowa &rarr; Ohio</h2>
+        <div class="meta">Corn, monthly<br>2015&ndash;2026 (137 mo.)</div>
+      </div>
+
+      <div class="judgment">
+        <div class="q">Is a move in Iowa's price worth acting on?</div>
+        <div class="stamp-row">
+          <div class="stamp safe">Act on it</div>
+          <div class="verdict-text">
+            <p>Yes. When Iowa's price moves, Ohio's moves the same month, and Iowa's recent price history helps predict where Ohio's is headed for roughly the next eight months.</p>
+            <div class="stats">same-month lag: k*=0, &rho;=0.840, 95% CI [0,0]<br>Iowa&rarr;Ohio Granger: significant lags 1&ndash;8 (min p=0.0089)<br>Ohio&rarr;Iowa: not supported</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="judgment">
+        <div class="q">Will the Iowa&ndash;Ohio price gap close?</div>
+        <div class="stamp-row">
+          <div class="stamp caution">Use caution</div>
+          <div class="verdict-text">
+            <p>Not reliably. Over the past ten years this gap has sometimes closed and sometimes just drifted, with no stable pattern. Don't assume the current gap will revert.</p>
+            <div class="stats">cointegration (full period): p=0.1545, not significant<br>rolling 5-yr windows: significant in only 20 of 78 (26%)<br>structural break test: none detected (p=0.82)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ticket" id="ticket-nebraska" style="display:none;">
+      <div class="ticket-head">
+        <h2>Settlement advisory &mdash; Iowa &rarr; Nebraska</h2>
+        <div class="meta">Corn, monthly<br>2015&ndash;2026 (137 mo.)</div>
+      </div>
+
+      <div class="judgment">
+        <div class="q">Is a move in Iowa's price worth acting on?</div>
+        <div class="stamp-row">
+          <div class="stamp safe">Act on it</div>
+          <div class="verdict-text">
+            <p>Yes, even more so than Ohio. Iowa and Nebraska move together the same month, and Iowa's history predicts Nebraska's returns across the full 12-month window tested.</p>
+            <div class="stats">same-month lag: k*=0, &rho;=0.918, 95% CI [0,0]<br>Iowa&rarr;Nebraska Granger: significant lags 1&ndash;12 (min p&lt;0.001)<br>Nebraska&rarr;Iowa: not supported (p up to 0.995)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="judgment">
+        <div class="q">Will the Iowa&ndash;Nebraska price gap close?</div>
+        <div class="stamp-row">
+          <div class="stamp safe">Expect reversion</div>
+          <div class="verdict-text">
+            <p>Yes, with real confidence. This gap has a long, stable history of closing back up, confirmed again on a held-out period held back from model-building. A shift in the relationship itself was detected in September 2022 &mdash; worth knowing, but it does not mean the gap stopped reverting.</p>
+            <div class="stats">cointegration (full period): p=0.0082, significant<br>stable across backtest split (train p=0.0415)<br>structural break detected: Sept. 2022 (p&lt;0.001)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      This is a working prototype, not a live tool or a finished product. It reads out results already computed and validated in <em>&ldquo;Toward Price-Transmission-Aware Decision Support for Corn Belt Farmers: An Empirical Diagnosis.&rdquo;</em> Extending it to Illinois, Minnesota, Wisconsin, and soybeans &mdash; and connecting it to a live price feed &mdash; is the planned next step, not something this prototype does today.
+      <span class="cite">Data: USDA NASS QuickStats, Price Received (corn), Jan 2015&ndash;May 2026.</span>
+    </footer>
+  </div>
+
+  <script>
+    function showPair(which){
+      const isOhio = which === 'ohio';
+      document.getElementById('ticket-ohio').style.display = isOhio ? '' : 'none';
+      document.getElementById('ticket-nebraska').style.display = isOhio ? 'none' : '';
+      document.getElementById('tab-ohio').classList.toggle('active', isOhio);
+      document.getElementById('tab-nebraska').classList.toggle('active', !isOhio);
+    }
+  </script>
+</body>
+</html>
